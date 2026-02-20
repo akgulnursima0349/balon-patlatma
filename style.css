@@ -1,0 +1,124 @@
+body {
+    margin: 0; padding: 0; overflow: hidden;
+    background-color: #c4b5fd; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+#main-layout {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    gap: 20px;
+}
+#game-area {
+    position: relative;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    overflow: hidden;
+    flex-grow: 1;
+    max-width: 800px;
+}
+canvas {
+    display: block;
+    background-color: #f5f3ff;
+    cursor: crosshair;
+    width: 100%;
+    height: auto;
+}
+#sidebar {
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    z-index: 40;
+}
+.stat-card {
+    background: white;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+.icon-btn {
+    width: 55px;
+    height: 55px;
+    background: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+.icon-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+.icon-btn:active { transform: scale(0.9); }
+
+.overlay {
+    position: absolute; inset: 0;
+    background: rgba(139, 92, 246, 0.98);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 50; color: white; border-radius: 20px;
+    text-align: center;
+    padding: 20px;
+}
+
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 500px;
+}
+.theme-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.theme-card:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-5px);
+    border-color: white;
+}
+.theme-preview {
+    font-size: 40px;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,0.2));
+}
+
+/* Ceza Topları Stili */
+.penalty-container {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.penalty-bubble {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+    transition: background 0.3s;
+}
+.penalty-bubble.active {
+    background: #64748b;
+}
