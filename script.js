@@ -425,17 +425,44 @@ function checkWinCondition() {
 }
 
 function pushGridDown() {
+    // Baloncuk vurma oyunlarında her bir satır birbiriyle zig-zag (offset) yapar.
+    // Eğer tüm satırları 1 satır aşağı kaydırırsak, hepsinin fiziksel pozisyonu (x eksenindeki yeri) kayar.
+    // Bunu engellemek için r-1'den kopya alırken sütun hizalamasına dikkat etmemiz gerekir.
+
+    // Satırları kaydır
     for (let r = ROWS - 1; r > 0; r--) {
         for (let c = 0; c < COLS; c++) {
-            grid[r][c].active = grid[r - 1][c].active;
-            grid[r][c].colorIndex = grid[r - 1][c].colorIndex;
+            let sourceC = c;
+
+            // Satır çift/tek durumuna göre yatay hizalamayı düzeltme mantığı
+            if (r % 2 === 0) {
+                // Hedef ÇİFT, kaynak TEK satır.
+                sourceC = c - 1;
+            } else {
+                // Hedef TEK, kaynak ÇİFT satır.
+                sourceC = c;
+            }
+
+            if (sourceC >= 0 && sourceC < COLS) {
+                grid[r][c].active = grid[r - 1][sourceC].active;
+                grid[r][c].colorIndex = grid[r - 1][sourceC].colorIndex;
+            } else {
+                grid[r][c].active = false;
+            }
         }
     }
+
+    // En üst satırı oluştur (her zaman 0. index yani ÇİFT kabul edilir, tam başlar)
     const themeData = THEMES[currentTheme];
     for (let c = 0; c < COLS; c++) {
         grid[0][c].active = true;
         grid[0][c].colorIndex = Math.floor(Math.random() * themeData.colors.length);
     }
+
+    // Düşme anına özel bağlantısız baloncukları kontrol et
+    // grid eklendiği için bağlantısı kopan balonlar olabilir.
+    dropDisconnected();
+
     // Limit kontrolü
     for (let c = 0; c < COLS; c++) if (grid[ROWS - 8][c].active) endGame();
     updateUI();
