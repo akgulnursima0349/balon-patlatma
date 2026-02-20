@@ -26,13 +26,13 @@ let isMuted = false;
 
 // SES YÖNETİMİ
 const audioLibrary = {
-    shoot: new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3'),
-    win: new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'),
-    gameOver: new Audio('https://assets.mixkit.co/active_storage/sfx/2522/2522-preview.mp3'),
-    bgm: new Audio('https://assets.mixkit.co/active_storage/sfx/123/123-preview.mp3'),
-    pop_default: new Audio('https://assets.mixkit.co/active_storage/sfx/615/615-preview.mp3'),
-    pop_animals: new Audio('https://assets.mixkit.co/active_storage/sfx/2513/2513-preview.mp3'),
-    pop_candy: new Audio('https://assets.mixkit.co/active_storage/sfx/584/584-preview.mp3')
+    shoot: new Audio('sounds/atis.mp3'),
+    win: new Audio('sounds/kazandiniz.mp3'),
+    gameOver: new Audio('sounds/oyun_bitti.mp3'),
+    bgm: new Audio('https://assets.mixkit.co/active_storage/sfx/123/123-preview.mp3'), // Orijinal fon müziği duruyor, istersen değiştirebiliriz
+    pop_default: new Audio('sounds/pop_klasik.mp3'),
+    pop_animals: new Audio('sounds/pop_hayvanlar.mp3'),
+    pop_candy: new Audio('sounds/pop_sekerler.mp3')
 };
 
 audioLibrary.bgm.loop = true;
