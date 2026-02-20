@@ -212,15 +212,24 @@ function startPopAnimation(r, c) {
 
 function resize() {
     const container = document.getElementById('game-area');
-    canvas.width = container.clientWidth;
-    // Eğer mobil cihazsa veya dikey ekransa, yüksekliği genişliğe orantılı (örnek: 4:5 veya 1:1.2 oran) yaparak
-    // fırlatıcı ile hedefler arasındaki devasa boşluğu engelle.
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile) {
-        // Mobilde genişliğin 1.3 katı maksimum yükseklik olsun, böylece atış mesafesi kısalır
-        canvas.height = Math.min(window.innerHeight * 0.7, canvas.width * 1.3);
+    let availableW = container.clientWidth;
+    let availableH = container.clientHeight || window.innerHeight;
+
+    // Sabit Oyun Oranı (En boy oranı)
+    // W = (COLS + 0.5) * 2 * R
+    // H = ROWS * 1.732 * R + (Atıcı boşluğu = 3.5 * R)
+    let ratioW = (COLS + 0.5) * 2;
+    let ratioH = ROWS * 1.732 + 3.5;
+    let idealRatio = ratioW / ratioH;
+
+    if (availableW / availableH > idealRatio) {
+        // Container çok geniş, yüksekliğe göre sınırla
+        canvas.height = availableH;
+        canvas.width = availableH * idealRatio;
     } else {
-        canvas.height = window.innerHeight * 0.9;
+        // Container çok uzun, genişliğe göre sınırla
+        canvas.width = availableW;
+        canvas.height = availableW / idealRatio;
     }
 
     bubbleRadius = canvas.width / (COLS + 0.5) / 2;
@@ -229,7 +238,7 @@ function resize() {
     // Yükseklik değiştiği için atıcının pozisyonunu güncellememiz gerekebilir
     if (projectile && !projectile.moving && !projectile.isSettling) {
         projectile.x = canvas.width / 2;
-        projectile.y = canvas.height - bubbleRadius - 30;
+        projectile.y = canvas.height - bubbleRadius * 1.5;
     }
 }
 
@@ -319,7 +328,7 @@ function render() {
             }
         }
 
-        const startX = canvas.width / 2, startY = canvas.height - bubbleRadius - 30;
+        const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(mouse.y - startY, mouse.x - startX);
         if (angle < 0 && !projectile.moving && !projectile.isSettling) drawAimingArrow(startX, startY, angle);
 
@@ -447,7 +456,7 @@ function endGame() {
 
 function createProjectile() {
     projectile = {
-        x: canvas.width / 2, y: canvas.height - bubbleRadius - 30,
+        x: canvas.width / 2, y: canvas.height - bubbleRadius * 1.5,
         vx: 0, vy: 0, colorIndex: nextColorIndex,
         moving: false, isSettling: false
     };
@@ -462,7 +471,7 @@ function handleInput(e) {
     mouse.x = x; mouse.y = y;
 
     if ((e.type === 'pointerup' || e.type === 'touchend') && projectile && !projectile.moving) {
-        const startX = canvas.width / 2, startY = canvas.height - bubbleRadius - 30;
+        const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(y - startY, x - startX);
         if (angle < -0.2 && angle > -Math.PI + 0.2) {
             playSound('shoot');
