@@ -29,7 +29,7 @@ const audioLibrary = {
     shoot: new Audio('sounds/atis.mp3'),
     win: new Audio('sounds/kazandiniz.mp3'),
     gameOver: new Audio('sounds/oyun_bitti.mp3'),
-    bgm: new Audio('https://assets.mixkit.co/active_storage/sfx/123/123-preview.mp3'), // Orijinal fon müziği duruyor, istersen değiştirebiliriz
+    bgm: new Audio('sounds/arkaplan.mp3'), // Arka plan müziği için
     pop_default: new Audio('sounds/pop_klasik.mp3'),
     pop_animals: new Audio('sounds/pop_hayvanlar.mp3'),
     pop_candy: new Audio('sounds/pop_sekerler.mp3')
@@ -364,7 +364,7 @@ function checkCollision() {
 
 function finalizeSettling() {
     const r = projectile.targetR; const c = projectile.targetC;
-    if (r >= ROWS - 5) { endGame(); return; }
+    if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
     grid[r][c].colorIndex = projectile.colorIndex;
     const matches = findMatches(r, c, grid[r][c].colorIndex);
@@ -413,7 +413,7 @@ function pushGridDown() {
         grid[0][c].colorIndex = Math.floor(Math.random() * themeData.colors.length);
     }
     // Limit kontrolü
-    for (let c = 0; c < COLS; c++) if (grid[ROWS - 5][c].active) endGame();
+    for (let c = 0; c < COLS; c++) if (grid[ROWS - 8][c].active) endGame();
     updateUI();
 }
 
