@@ -213,9 +213,24 @@ function startPopAnimation(r, c) {
 function resize() {
     const container = document.getElementById('game-area');
     canvas.width = container.clientWidth;
-    canvas.height = window.innerHeight * 0.9;
+    // Eğer mobil cihazsa veya dikey ekransa, yüksekliği genişliğe orantılı (örnek: 4:5 veya 1:1.2 oran) yaparak
+    // fırlatıcı ile hedefler arasındaki devasa boşluğu engelle.
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+        // Mobilde genişliğin 1.3 katı maksimum yükseklik olsun, böylece atış mesafesi kısalır
+        canvas.height = Math.min(window.innerHeight * 0.7, canvas.width * 1.3);
+    } else {
+        canvas.height = window.innerHeight * 0.9;
+    }
+
     bubbleRadius = canvas.width / (COLS + 0.5) / 2;
     rowHeight = bubbleRadius * 1.732;
+
+    // Yükseklik değiştiği için atıcının pozisyonunu güncellememiz gerekebilir
+    if (projectile && !projectile.moving && !projectile.isSettling) {
+        projectile.x = canvas.width / 2;
+        projectile.y = canvas.height - bubbleRadius - 30;
+    }
 }
 
 function updateUI() {
