@@ -212,25 +212,30 @@ function startPopAnimation(r, c) {
 
 function resize() {
     const container = document.getElementById('game-area');
-    let availableW = container.clientWidth;
-    let availableH = container.clientHeight || window.innerHeight;
+    // Sayfanın %95'i kadarını alıp taşmayı engelliyoruz
+    let maxH = window.innerHeight * 0.95;
 
-    // Sabit Oyun Oranı (En boy oranı)
-    // W = (COLS + 0.5) * 2 * R
-    // H = ROWS * 1.732 * R + (Atıcı boşluğu = 3.5 * R)
+    // Konteynerın kendi genişliğini baz alıyoruz
+    let availableW = container.clientWidth;
+
+    // Oran hesabı:
     let ratioW = (COLS + 0.5) * 2;
     let ratioH = ROWS * 1.732 + 3.5;
     let idealRatio = ratioW / ratioH;
 
-    if (availableW / availableH > idealRatio) {
-        // Container çok geniş, yüksekliğe göre sınırla
-        canvas.height = availableH;
-        canvas.width = availableH * idealRatio;
-    } else {
-        // Container çok uzun, genişliğe göre sınırla
-        canvas.width = availableW;
-        canvas.height = availableW / idealRatio;
+    // Hedeflenen genişlik ve yüksekliği hesapla
+    let targetW = availableW;
+    let targetH = targetW / idealRatio;
+
+    // Eğer hesaplanan yükseklik ekrana sığmıyorsa, yüksekliğe göre mecburi küçültme yap
+    if (targetH > maxH) {
+        targetH = maxH;
+        targetW = targetH * idealRatio;
     }
+
+    // Canvas çözünürlüğünü tam piksel olarak ayarla
+    canvas.width = targetW;
+    canvas.height = targetH;
 
     bubbleRadius = canvas.width / (COLS + 0.5) / 2;
     rowHeight = bubbleRadius * 1.732;
