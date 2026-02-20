@@ -9,7 +9,7 @@ const nextCtx = nextCanvas.getContext('2d');
 
 const ROWS = 20;
 const COLS = 16;
-const AUTO_DROP_SECONDS = 25;
+const AUTO_DROP_SECONDS = 45; // Daha seyrek aşağı düşmesi için süre uzatıldı
 const MAX_MISSES = 5; // Kaç hatalı atışta satır iner
 
 const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
@@ -394,10 +394,15 @@ function finalizeSettling() {
     const matches = findMatches(r, c, grid[r][c].colorIndex);
 
     if (matches.size >= 3) {
+        let delay = 0;
         matches.forEach(k => {
             const [rr, cc] = k.split(',').map(Number);
-            startPopAnimation(rr, cc);
+            setTimeout(() => {
+                startPopAnimation(rr, cc);
+            }, delay);
+            delay += 60; // Her top için 60ms gecikme ekleyerek sırayla patlamalarını sağla
         });
+
         score += matches.size * 10;
         setTimeout(() => {
             const dropped = dropDisconnected();
@@ -432,23 +437,12 @@ function pushGridDown() {
     // Satırları kaydır
     for (let r = ROWS - 1; r > 0; r--) {
         for (let c = 0; c < COLS; c++) {
-            let sourceC = c;
-
-            // Satır çift/tek durumuna göre yatay hizalamayı düzeltme mantığı
-            if (r % 2 === 0) {
-                // Hedef ÇİFT, kaynak TEK satır.
-                sourceC = c - 1;
-            } else {
-                // Hedef TEK, kaynak ÇİFT satır.
-                sourceC = c;
-            }
-
-            if (sourceC >= 0 && sourceC < COLS) {
-                grid[r][c].active = grid[r - 1][sourceC].active;
-                grid[r][c].colorIndex = grid[r - 1][sourceC].colorIndex;
-            } else {
-                grid[r][c].active = false;
-            }
+            // Sağ boşluk(kayma) sorununu çözmek için offset farkını yok ediyoruz:
+            // Sütun indeksini olduğu gibi kopyala, ancak altıgen dizilimi korumak için 
+            // sadece renk ve aktiflik durumunu dikey olarak kopyala.
+            // Bu sayede hiçbir sütun sağa sola kaymaz, sadece renkler aşağı iner.
+            grid[r][c].active = grid[r - 1][c].active;
+            grid[r][c].colorIndex = grid[r - 1][c].colorIndex;
         }
     }
 
@@ -502,8 +496,8 @@ function handleInput(e) {
         const angle = Math.atan2(y - startY, x - startX);
         if (angle < -0.2 && angle > -Math.PI + 0.2) {
             playSound('shoot');
-            projectile.vx = Math.cos(angle) * 8.5;
-            projectile.vy = Math.sin(angle) * 8.5;
+            projectile.vx = Math.cos(angle) * 20; // Atış hızı ciddi oranda artırıldı
+            projectile.vy = Math.sin(angle) * 20;
             projectile.moving = true;
         }
     }

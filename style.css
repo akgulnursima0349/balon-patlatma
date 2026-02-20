@@ -26,7 +26,8 @@ body {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     overflow: hidden;
     flex-grow: 1;
-    max-width: 800px;
+    /* max-width kaldırıldı veya büyütüldü ki PC'de çok dar kalmasın */
+    max-width: 1400px;
 }
 
 canvas {
