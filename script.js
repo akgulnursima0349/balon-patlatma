@@ -57,26 +57,35 @@ function toggleMute() {
 const THEMES = {
     default: {
         icons: null, popSound: 'pop_default', colors: [
-            { name: 'red', gradient: ['#FF5F6D', '#B91C1C'] }, { name: 'blue', gradient: ['#38bdf8', '#1e40af'] },
-            { name: 'green', gradient: ['#4ade80', '#166534'] }, { name: 'yellow', gradient: ['#fde047', '#a16207'] },
-            { name: 'purple', gradient: ['#c084fc', '#6b21a8'] }, { name: 'cyan', gradient: ['#22d3ee', '#0e7490'] },
-            { name: 'orange', gradient: ['#fb923c', '#9a3412'] }
+            { name: 'red',    gradient: ['#FF5555', '#BB0000'] },
+            { name: 'blue',   gradient: ['#4488FF', '#0033CC'] },
+            { name: 'green',  gradient: ['#44DD44', '#008800'] },
+            { name: 'yellow', gradient: ['#FFEE22', '#CC9900'] },
+            { name: 'purple', gradient: ['#CC44FF', '#7700BB'] },
+            { name: 'cyan',   gradient: ['#33DDFF', '#0088BB'] },
+            { name: 'orange', gradient: ['#FF8833', '#BB4400'] }
         ]
     },
     animals: {
         icons: ['🐻', '🐼', '🐯', '🦁', '🐸', '🐵', '🐰'], popSound: 'pop_animals', colors: [
-            { name: 'brown', gradient: ['#A8A29E', '#78350F'] }, { name: 'white', gradient: ['#F8FAFC', '#94A3B8'] },
-            { name: 'orange', gradient: ['#FDBA74', '#C2410C'] }, { name: 'yellow', gradient: ['#FEF08A', '#A16207'] },
-            { name: 'green', gradient: ['#86EFAC', '#15803D'] }, { name: 'gray', gradient: ['#CBD5E1', '#475569'] },
-            { name: 'pink', gradient: ['#F9A8D4', '#BE185D'] }
+            { name: 'brown',  gradient: ['#CC7733', '#7B3310'] },
+            { name: 'white',  gradient: ['#EEF6FF', '#8899BB'] },
+            { name: 'orange', gradient: ['#FF7722', '#CC4400'] },
+            { name: 'yellow', gradient: ['#FFD700', '#BB8800'] },
+            { name: 'green',  gradient: ['#44CC55', '#117722'] },
+            { name: 'gray',   gradient: ['#99AABB', '#556677'] },
+            { name: 'pink',   gradient: ['#FF55AA', '#BB1166'] }
         ]
     },
     candy: {
         icons: ['🍭', '🍬', '🍩', '🧁', '🍦', '🍪', '🍫'], popSound: 'pop_candy', colors: [
-            { name: 'pink', gradient: ['#FBCFE8', '#DB2777'] }, { name: 'blue', gradient: ['#BFDBFE', '#2563EB'] },
-            { name: 'purple', gradient: ['#E9D5FF', '#9333EA'] }, { name: 'cyan', gradient: ['#CFFAFE', '#0891B2'] },
-            { name: 'mint', gradient: ['#D1FAE5', '#059669'] }, { name: 'cream', gradient: ['#FEF3C7', '#D97706'] },
-            { name: 'red', gradient: ['#FECACA', '#DC2626'] }
+            { name: 'pink',   gradient: ['#FF55BB', '#BB0077'] },
+            { name: 'blue',   gradient: ['#4499FF', '#0055CC'] },
+            { name: 'purple', gradient: ['#BB44FF', '#6600AA'] },
+            { name: 'cyan',   gradient: ['#22CCFF', '#0077AA'] },
+            { name: 'mint',   gradient: ['#33DD77', '#008844'] },
+            { name: 'cream',  gradient: ['#FFCC33', '#BB7700'] },
+            { name: 'red',    gradient: ['#FF4444', '#BB0000'] }
         ]
     }
 };
@@ -86,6 +95,7 @@ let projectile = null;
 let nextColorIndex = 0;
 let mouse = { x: 0, y: 0 };
 let popAnimations = [];
+let bubbleOffsets = {}; // "r,c" -> {dx, dy, vx, vy} çarpışma titreme animasyonu
 
 function setTheme(theme) {
     currentTheme = theme;
@@ -125,6 +135,7 @@ function startGame() {
 
 function initGrid() {
     grid = [];
+    bubbleOffsets = {};
     const themeData = THEMES[currentTheme];
     for (let r = 0; r < ROWS; r++) {
         grid[r] = [];
@@ -198,6 +209,78 @@ function dropDisconnected() {
     return count;
 }
 
+// Çarpışma anında bağlı balon grubuna yay fiziğiyle itme uygular (tüm modlar için)
+function applyImpact(hitR, hitC, impactVx, impactVy) {
+    const mag = Math.hypot(impactVx, impactVy) || 1;
+    const dirX = impactVx / mag;
+    const dirY = impactVy / mag;
+    const strength = bubbleRadius * 0.4;
+
+    // BFS ile bağlı grubu bul
+    const connected = new Set();
+    const queue = [{ r: hitR, c: hitC }];
+    connected.add(`${hitR},${hitC}`);
+    let head = 0;
+    while (head < queue.length) {
+        const { r, c } = queue[head++];
+        getNeighbors(r, c).forEach(nb => {
+            const key = `${nb.r},${nb.c}`;
+            if (nb.active && !nb.isPopping && !connected.has(key)) {
+                connected.add(key);
+                queue.push({ r: nb.r, c: nb.c });
+            }
+        });
+    }
+
+    // Bağlı grup: çarpış yönü + radyal bileşen (dalgalanma etkisi)
+    connected.forEach(key => {
+        const [r, c] = key.split(',').map(Number);
+        const dist = Math.hypot(r - hitR, c - hitC);
+        const factor = 1 / (dist * 0.9 + 1);
+        const radX = dist > 0 ? (c - hitC) / dist * 0.5 : 0;
+        const radY = dist > 0 ? (r - hitR) / dist * 0.5 : 0;
+        if (!bubbleOffsets[key]) bubbleOffsets[key] = { dx: 0, dy: 0, vx: 0, vy: 0 };
+        bubbleOffsets[key].vx += (dirX + radX) * strength * factor;
+        bubbleOffsets[key].vy += (dirY + radY) * strength * factor;
+    });
+
+    // Bağlı olmayan ama yakın balonlar: dışa doğru küçük sallanma
+    for (let dr = -3; dr <= 3; dr++) {
+        for (let dc = -3; dc <= 3; dc++) {
+            const nr = hitR + dr, nc = hitC + dc;
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+            const key = `${nr},${nc}`;
+            if (connected.has(key) || !grid[nr][nc].active || grid[nr][nc].isPopping) continue;
+            const dist = Math.hypot(dr, dc);
+            if (dist > 3) continue;
+            const radX = dist > 0 ? dc / dist : dirX;
+            const radY = dist > 0 ? dr / dist : dirY;
+            const factor = 1 / (dist * 1.2 + 1);
+            if (!bubbleOffsets[key]) bubbleOffsets[key] = { dx: 0, dy: 0, vx: 0, vy: 0 };
+            bubbleOffsets[key].vx += radX * strength * 0.25 * factor;
+            bubbleOffsets[key].vy += radY * strength * 0.25 * factor;
+        }
+    }
+}
+
+// Her kare balon offsetlerini yay fiziğiyle sıfıra doğru günceller
+function updateBubbleOffsets() {
+    const spring = 0.18;
+    const damping = 0.72;
+    for (const key of Object.keys(bubbleOffsets)) {
+        const o = bubbleOffsets[key];
+        o.vx += -o.dx * spring;
+        o.vy += -o.dy * spring;
+        o.dx += o.vx;
+        o.dy += o.vy;
+        o.vx *= damping;
+        o.vy *= damping;
+        if (Math.abs(o.dx) < 0.05 && Math.abs(o.dy) < 0.05 && Math.abs(o.vx) < 0.05 && Math.abs(o.vy) < 0.05) {
+            delete bubbleOffsets[key];
+        }
+    }
+}
+
 function startPopAnimation(r, c) {
     const b = grid[r][c];
     if (b.isPopping) return;
@@ -267,38 +350,89 @@ function drawBubbleOnCtx(context, x, y, colorIndex, scale = 1, alpha = 1) {
     const color = themeData.colors[colorIndex];
     if (!color) return;
     const r = Math.max(0, bubbleRadius * scale);
+
+    context.save();
     context.globalAlpha = alpha;
-    const grad = context.createRadialGradient(x - r / 3, y - r / 3, r / 10, x, y, r);
-    grad.addColorStop(0, color.gradient[0]);
-    grad.addColorStop(1, color.gradient[1]);
-    context.fillStyle = grad;
     context.beginPath();
     context.arc(x, y, r, 0, Math.PI * 2);
-    context.fill();
-    if (themeData.icons) {
-        context.font = `${r * 1.2}px Arial`;
-        context.textAlign = 'center'; context.textBaseline = 'middle';
-        context.fillText(themeData.icons[colorIndex], x, y + r * 0.05);
-    }
-    context.fillStyle = 'rgba(255,255,255,0.2)';
+    context.clip();
+
+    // 1. Temel küre gradyanı: üst-soldan sağ-alta (3D küre hacmi)
+    const baseGrad = context.createRadialGradient(
+        x - r * 0.22, y - r * 0.28, r * 0.05,
+        x + r * 0.18, y + r * 0.28, r * 1.08
+    );
+    baseGrad.addColorStop(0, color.gradient[0]);
+    baseGrad.addColorStop(1, color.gradient[1]);
+    context.fillStyle = baseGrad;
+    context.fillRect(x - r, y - r, r * 2, r * 2);
+
+    // 2. Koyu kenar halkası (iç gölge — rim efekti)
+    const rimGrad = context.createRadialGradient(x, y, r * 0.62, x, y, r);
+    rimGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    rimGrad.addColorStop(1, 'rgba(0,0,0,0.30)');
+    context.fillStyle = rimGrad;
+    context.fillRect(x - r, y - r, r * 2, r * 2);
+
+    // 3. Ana highlight: üst-orta, hafif sola yatık, geniş ve yumuşak
+    const hlGrad = context.createRadialGradient(
+        x - r * 0.14, y - r * 0.35, 0,
+        x - r * 0.05, y - r * 0.05, r * 0.82
+    );
+    hlGrad.addColorStop(0,    'rgba(255,255,255,0.92)');
+    hlGrad.addColorStop(0.30, 'rgba(255,255,255,0.38)');
+    hlGrad.addColorStop(0.60, 'rgba(255,255,255,0.06)');
+    hlGrad.addColorStop(1,    'rgba(255,255,255,0)');
+    context.fillStyle = hlGrad;
+    context.fillRect(x - r, y - r, r * 2, r * 2);
+
+    context.restore();
+
+    // 4. İnce dış kenar çizgisi
+    context.save();
+    context.globalAlpha = alpha * 0.30;
     context.beginPath();
-    context.arc(x - r / 3, y - r / 3, r / 3.5, 0, Math.PI * 2);
-    context.fill();
-    context.globalAlpha = 1;
+    context.arc(x, y, r, 0, Math.PI * 2);
+    context.strokeStyle = 'rgba(0,0,0,0.6)';
+    context.lineWidth = r * 0.07;
+    context.stroke();
+    context.restore();
+
+    if (themeData.icons) {
+        context.save();
+        context.globalAlpha = alpha;
+        context.font = `${r * 1.2}px Arial`;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(themeData.icons[colorIndex], x, y + r * 0.05);
+        context.restore();
+    }
 }
 
 function drawAimingArrow(startX, startY, angle) {
     ctx.save();
     ctx.translate(startX, startY);
     ctx.rotate(angle);
-    const arrowLen = 140;
-    const grad = ctx.createLinearGradient(0, 0, arrowLen, 0);
-    grad.addColorStop(0, 'rgba(139, 92, 246, 0.9)');
-    grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
-    ctx.strokeStyle = grad; ctx.lineWidth = 6; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(arrowLen, 0); ctx.stroke();
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.9)';
-    ctx.beginPath(); ctx.moveTo(arrowLen, 0); ctx.lineTo(arrowLen - 15, -8); ctx.lineTo(arrowLen - 15, 8); ctx.fill();
+
+    const len      = 170; // toplam ok uzunluğu
+    const bodyStart = 28; // topun önünden başla
+    const shaftW   = 6;   // gövde yarı-genişliği
+    const headW    = 20;  // ok ucu yarı-genişliği (daha geniş)
+    const headBase = len - 62; // ok ucunun başladığı yer (uzun ve sivri)
+
+    // Tek parça dolu ok şekli (gövde + üçgen uç)
+    ctx.fillStyle = 'rgba(190, 215, 255, 0.75)';
+    ctx.beginPath();
+    ctx.moveTo(bodyStart,  shaftW);
+    ctx.lineTo(headBase,   shaftW);
+    ctx.lineTo(headBase,   headW);
+    ctx.lineTo(len,        0);       // ok ucu
+    ctx.lineTo(headBase,  -headW);
+    ctx.lineTo(headBase,  -shaftW);
+    ctx.lineTo(bodyStart, -shaftW);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
 }
 
@@ -312,10 +446,12 @@ function render() {
             lastDropTime = now;
         }
 
+        updateBubbleOffsets();
         grid.forEach(row => row.forEach(b => {
             if (b.active && !b.isPopping) {
                 const { x, y } = getBubbleCoords(b.r, b.c);
-                drawBubbleOnCtx(ctx, x, y, b.colorIndex);
+                const off = bubbleOffsets[`${b.r},${b.c}`];
+                drawBubbleOnCtx(ctx, off ? x + off.dx : x, off ? y + off.dy : y, b.colorIndex, 0.88);
             }
         }));
 
@@ -329,7 +465,7 @@ function render() {
                 popAnimations.splice(i, 1);
             } else {
                 const { x, y } = getBubbleCoords(anim.r, anim.c);
-                drawBubbleOnCtx(ctx, x, y, anim.colorIndex, 1.2 * (1 - progress), 1 - progress);
+                drawBubbleOnCtx(ctx, x, y, anim.colorIndex, 0.88 * (1 - progress), 1);
             }
         }
 
@@ -349,7 +485,7 @@ function render() {
                 projectile.x += dx * 0.15; projectile.y += dy * 0.15;
                 if (Math.hypot(dx, dy) < 1) finalizeSettling();
             }
-            drawBubbleOnCtx(ctx, projectile.x, projectile.y, projectile.colorIndex);
+            drawBubbleOnCtx(ctx, projectile.x, projectile.y, projectile.colorIndex, 0.88);
         }
     }
     requestAnimationFrame(render);
@@ -357,18 +493,23 @@ function render() {
 
 function checkCollision() {
     let hit = projectile.y <= bubbleRadius;
+    let hitR = -1, hitC = -1;
     if (!hit) {
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
                 if (grid[r][c].active && !grid[r][c].isPopping) {
                     const { x, y } = getBubbleCoords(r, c);
-                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.5) { hit = true; break; }
+                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.5) {
+                        hit = true; hitR = r; hitC = c; break;
+                    }
                 }
             }
             if (hit) break;
         }
     }
     if (hit) {
+        // Çarpılan balonun bağlı grubuna itme animasyonu uygula
+        if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
         let r = Math.round((projectile.y - bubbleRadius) / rowHeight);
         let offsetX = (r % 2 !== 0) ? bubbleRadius : 0;
