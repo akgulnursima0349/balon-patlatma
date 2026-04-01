@@ -96,6 +96,7 @@ let nextColorIndex = 0;
 let mouse = { x: 0, y: 0 };
 let popAnimations = [];
 let bubbleOffsets = {}; // "r,c" -> {dx, dy, vx, vy} çarpışma titreme animasyonu
+let gridRowOffset = 0; // pushGridDown sonrası parite kaymasını dengeler
 
 function setTheme(theme) {
     currentTheme = theme;
@@ -136,6 +137,7 @@ function startGame() {
 function initGrid() {
     grid = [];
     bubbleOffsets = {};
+    gridRowOffset = 0;
     const themeData = THEMES[currentTheme];
     for (let r = 0; r < ROWS; r++) {
         grid[r] = [];
@@ -152,14 +154,14 @@ function initGrid() {
 
 function getBubbleCoords(r, c) {
     let x = c * bubbleRadius * 2 + bubbleRadius;
-    if (r % 2 !== 0) x += bubbleRadius;
+    if ((r + gridRowOffset) % 2 !== 0) x += bubbleRadius;
     let y = r * rowHeight + bubbleRadius;
     return { x, y };
 }
 
 function getNeighbors(r, c) {
     const n = [];
-    const offset = (r % 2 === 0) ? 0 : 1;
+    const offset = ((r + gridRowOffset) % 2 === 0) ? 0 : 1;
     const dirs = [[0, -1], [0, 1], [-1, -1 + offset], [-1, offset], [1, -1 + offset], [1, offset]];
     for (let [dr, dc] of dirs) {
         let nr = r + dr, nc = c + dc;
@@ -415,7 +417,7 @@ function drawTrajectory(startX, startY, angle) {
     let vy = Math.sin(angle) * stepSize;
     let x = startX;
     let y = startY;
-    const dotR = bubbleRadius * 0.15;
+    const dotR = bubbleRadius * 0.22;
     const maxSteps = 500;
 
     for (let i = 0; i < maxSteps; i++) {
@@ -443,7 +445,7 @@ function drawTrajectory(startX, startY, angle) {
 
         // Her N adımda bir nokta çiz
         if (i % 5 === 0) {
-            const alpha = 0.72 - (i / maxSteps) * 0.45;
+            const alpha = 0.90 - (i / maxSteps) * 0.40;
             ctx.beginPath();
             ctx.arc(x, y, dotR, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
@@ -558,7 +560,7 @@ function checkCollision() {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
         let r = Math.round((projectile.y - bubbleRadius) / rowHeight);
-        let offsetX = (r % 2 !== 0) ? bubbleRadius : 0;
+        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
         if (grid[r][c] && grid[r][c].active) {
             const neighbors = getNeighbors(r, c).filter(n => !n.active);
@@ -638,7 +640,10 @@ function pushGridDown() {
         }
     }
 
-    // En üst satırı oluştur (her zaman 0. index yani ÇİFT kabul edilir, tam başlar)
+    // Parite sayacını tersine çevir — mevcut balonların X konumu kaymasın
+    gridRowOffset = 1 - gridRowOffset;
+
+    // En üst satırı oluştur
     const themeData = THEMES[currentTheme];
     for (let c = 0; c < COLS; c++) {
         grid[0][c].active = true;
@@ -646,7 +651,6 @@ function pushGridDown() {
     }
 
     // Düşme anına özel bağlantısız baloncukları kontrol et
-    // grid eklendiği için bağlantısı kopan balonlar olabilir.
     dropDisconnected();
 
     // Limit kontrolü
