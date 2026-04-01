@@ -95,6 +95,7 @@ let projectile = null;
 let nextColorIndex = 0;
 let mouse = { x: 0, y: 0 };
 let popAnimations = [];
+let fallAnimations = []; // bağlantısı kopan balonların düşme animasyonu
 let bubbleOffsets = {}; // "r,c" -> {dx, dy, vx, vy} çarpışma titreme animasyonu
 let gridRowOffset = 0; // pushGridDown sonrası parite kaymasını dengeler
 
@@ -204,7 +205,16 @@ function dropDisconnected() {
     let count = 0;
     grid.forEach(row => row.forEach(b => {
         if (b.active && !b.connected && !b.isPopping) {
-            startPopAnimation(b.r, b.c);
+            b.isPopping = true;
+            b.active = false;
+            const { x, y } = getBubbleCoords(b.r, b.c);
+            fallAnimations.push({
+                x, y,
+                vy: -1.5 + Math.random() * 1.0, // hafif yukarı fırlama
+                vx: (Math.random() - 0.5) * 1.5,
+                colorIndex: b.colorIndex,
+                startTime: Date.now()
+            });
             count++;
         }
     }));
@@ -511,6 +521,22 @@ function render() {
             } else {
                 const { x, y } = getBubbleCoords(anim.r, anim.c);
                 drawBubbleOnCtx(ctx, x, y, anim.colorIndex, 0.88 * (1 - progress), 1);
+            }
+        }
+
+        // Düşen balonlar
+        const gravity = 0.55;
+        for (let i = fallAnimations.length - 1; i >= 0; i--) {
+            const fa = fallAnimations[i];
+            fa.vy += gravity;
+            fa.x += fa.vx;
+            fa.y += fa.vy;
+            const elapsed = Date.now() - fa.startTime;
+            const alpha = Math.max(0, 1 - elapsed / 700);
+            if (alpha <= 0 || fa.y > canvas.height + bubbleRadius * 2) {
+                fallAnimations.splice(i, 1);
+            } else {
+                drawBubbleOnCtx(ctx, fa.x, fa.y, fa.colorIndex, 0.88, alpha);
             }
         }
 
