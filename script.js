@@ -295,13 +295,11 @@ function updateBubbleOffsets() {
 
 function startPopAnimation(r, c) {
     const b = grid[r][c];
-    if (b.isPopping && popAnimations.some(a => a.r === r && a.c === c)) return;
+    if (b.isPopping) return;
     b.isPopping = true;
-    popAnimations.push({
-        r: r, c: c,
-        colorIndex: b.colorIndex,
-        startTime: Date.now()
-    });
+    b.active = false; // grid'den hemen kaldır — push olsa da animasyon etkilenmesin
+    const { x, y } = getBubbleCoords(r, c); // koordinatı şu an kaydet
+    popAnimations.push({ x, y, colorIndex: b.colorIndex, startTime: Date.now() });
     playSound(THEMES[currentTheme].popSound);
 }
 
@@ -515,12 +513,9 @@ function render() {
             const elapsed = Date.now() - anim.startTime;
             const progress = elapsed / 400;
             if (progress >= 1) {
-                grid[anim.r][anim.c].active = false;
-                grid[anim.r][anim.c].isPopping = false;
-                popAnimations.splice(i, 1);
+                popAnimations.splice(i, 1); // grid zaten hemen güncellendi, burada dokunmaya gerek yok
             } else {
-                const { x, y } = getBubbleCoords(anim.r, anim.c);
-                drawBubbleOnCtx(ctx, x, y, anim.colorIndex, 0.88 * (1 - progress), 1);
+                drawBubbleOnCtx(ctx, anim.x, anim.y, anim.colorIndex, 0.88 * (1 - progress), 1);
             }
         }
 
@@ -589,14 +584,30 @@ function checkCollision() {
         let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
         if (grid[r][c] && grid[r][c].active) {
-            const neighbors = getNeighbors(r, c).filter(n => !n.active);
+            // Önce komşulara bak
+            const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
                     const coords = getBubbleCoords(n.r, n.c);
                     const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
                     if (d < minDist) { minDist = d; best = n; }
-                }); r = best.r; c = best.c;
+                });
+                r = best.r; c = best.c;
+            } else {
+                // Komşu bulunamazsa daha geniş alanda en yakın boş hücreyi bul
+                let best = null, minDist = Infinity;
+                for (let dr = -2; dr <= 1; dr++) {
+                    for (let dc = -2; dc <= 2; dc++) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+                        if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
+                        const coords = getBubbleCoords(nr, nc);
+                        const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                        if (d < minDist) { minDist = d; best = grid[nr][nc]; }
+                    }
+                }
+                if (best) { r = best.r; c = best.c; }
             }
         }
         const target = getBubbleCoords(r, c);
@@ -614,22 +625,28 @@ function finalizeSettling() {
     const matches = findMatches(r, c, grid[r][c].colorIndex);
 
     if (matches.size >= 3) {
-        // Önce hepsini isPopping=true yap — dropDisconnected bunları köprü saymasın
+        // Grid'den anında kaldır, koordinatları şimdi kaydet (gridRowOffset değişse etkilenmez)
+        const matchData = [];
         matches.forEach(k => {
             const [rr, cc] = k.split(',').map(Number);
-            grid[rr][cc].isPopping = true;
+            const b = grid[rr][cc];
+            b.isPopping = true;
+            b.active = false;
+            const { x, y } = getBubbleCoords(rr, cc);
+            matchData.push({ x, y, colorIndex: b.colorIndex });
         });
 
-        // Ardından animasyonu sırayla başlat
+        // Patlama animasyonlarını sırayla başlat (görsel efekt, grid zaten güncellendi)
         let delay = 0;
-        matches.forEach(k => {
-            const [rr, cc] = k.split(',').map(Number);
-            setTimeout(() => startPopAnimation(rr, cc), delay);
+        matchData.forEach(({ x, y, colorIndex }) => {
+            setTimeout(() => {
+                popAnimations.push({ x, y, colorIndex, startTime: Date.now() });
+                playSound(THEMES[currentTheme].popSound);
+            }, delay);
             delay += 60;
         });
 
         score += matches.size * 10;
-        // dropDisconnected'ı animasyon başladıktan hemen sonra çalıştır
         const dropped = dropDisconnected();
         if (dropped > 0) score += dropped * 20;
         updateUI();
@@ -673,11 +690,20 @@ function pushGridDown() {
     // Parite sayacını tersine çevir — mevcut balonların X konumu kaymasın
     gridRowOffset = 1 - gridRowOffset;
 
-    // En üst satırı oluştur
+    // En üst satırı oluştur — renkleri tahtadaki mevcut renklerle sınırla (görsel tutarlılık)
     const themeData = THEMES[currentTheme];
+    const colorsOnBoard = new Set();
+    for (let row = 1; row < ROWS; row++)
+        for (let col = 0; col < COLS; col++)
+            if (grid[row][col].active && !grid[row][col].isPopping)
+                colorsOnBoard.add(grid[row][col].colorIndex);
+    const palette = colorsOnBoard.size > 0
+        ? [...colorsOnBoard]
+        : Array.from({ length: themeData.colors.length }, (_, i) => i);
     for (let c = 0; c < COLS; c++) {
         grid[0][c].active = true;
-        grid[0][c].colorIndex = Math.floor(Math.random() * themeData.colors.length);
+        grid[0][c].colorIndex = palette[Math.floor(Math.random() * palette.length)];
+        grid[0][c].isPopping = false;
     }
 
     // Düşme anına özel bağlantısız baloncukları kontrol et
