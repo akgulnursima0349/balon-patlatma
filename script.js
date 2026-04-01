@@ -285,7 +285,7 @@ function updateBubbleOffsets() {
 
 function startPopAnimation(r, c) {
     const b = grid[r][c];
-    if (b.isPopping) return;
+    if (b.isPopping && popAnimations.some(a => a.r === r && a.c === c)) return;
     b.isPopping = true;
     popAnimations.push({
         r: r, c: c,
@@ -588,21 +588,25 @@ function finalizeSettling() {
     const matches = findMatches(r, c, grid[r][c].colorIndex);
 
     if (matches.size >= 3) {
+        // Önce hepsini isPopping=true yap — dropDisconnected bunları köprü saymasın
+        matches.forEach(k => {
+            const [rr, cc] = k.split(',').map(Number);
+            grid[rr][cc].isPopping = true;
+        });
+
+        // Ardından animasyonu sırayla başlat
         let delay = 0;
         matches.forEach(k => {
             const [rr, cc] = k.split(',').map(Number);
-            setTimeout(() => {
-                startPopAnimation(rr, cc);
-            }, delay);
-            delay += 60; // Her top için 60ms gecikme ekleyerek sırayla patlamalarını sağla
+            setTimeout(() => startPopAnimation(rr, cc), delay);
+            delay += 60;
         });
 
         score += matches.size * 10;
-        setTimeout(() => {
-            const dropped = dropDisconnected();
-            if (dropped > 0) score += dropped * 20;
-            updateUI();
-        }, 100);
+        // dropDisconnected'ı animasyon başladıktan hemen sonra çalıştır
+        const dropped = dropDisconnected();
+        if (dropped > 0) score += dropped * 20;
+        updateUI();
         // Başarılı patlatmada ceza sayacı dolmaz (veya klasik modda azalmaz)
     } else {
         // Hatalı atışta ceza sayacını azalt
