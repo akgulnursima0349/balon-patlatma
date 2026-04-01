@@ -580,7 +580,7 @@ function checkCollision() {
         // Çarpılan balonun bağlı grubuna itme animasyonu uygula
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
-        let r = Math.round((projectile.y - bubbleRadius) / rowHeight);
+        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
         let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
         if (grid[r][c] && grid[r][c].active) {
@@ -618,10 +618,29 @@ function checkCollision() {
 }
 
 function finalizeSettling() {
-    const r = projectile.targetR; const c = projectile.targetC;
+    let r = projectile.targetR; let c = projectile.targetC;
+
+    // Hedef hücre dolu ise (hesaplama hatası) — en yakın boş hücreyi bul
+    if (grid[r][c] && grid[r][c].active) {
+        let best = null, minDist = Infinity;
+        for (let dr = -3; dr <= 3; dr++) {
+            for (let dc = -3; dc <= 3; dc++) {
+                const nr = r + dr, nc = c + dc;
+                if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+                if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
+                const coords = getBubbleCoords(nr, nc);
+                const d = Math.hypot(projectile.targetX - coords.x, projectile.targetY - coords.y);
+                if (d < minDist) { minDist = d; best = grid[nr][nc]; }
+            }
+        }
+        if (!best) { createProjectile(); return; } // hiç yer yoksa topu sil, yenisini ver
+        r = best.r; c = best.c;
+    }
+
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
     grid[r][c].colorIndex = projectile.colorIndex;
+    grid[r][c].isPopping = false;
     const matches = findMatches(r, c, grid[r][c].colorIndex);
 
     if (matches.size >= 3) {
