@@ -409,6 +409,49 @@ function drawBubbleOnCtx(context, x, y, colorIndex, scale = 1, alpha = 1) {
     }
 }
 
+function drawTrajectory(startX, startY, angle) {
+    const stepSize = 7;
+    let vx = Math.cos(angle) * stepSize;
+    let vy = Math.sin(angle) * stepSize;
+    let x = startX;
+    let y = startY;
+    const dotR = bubbleRadius * 0.15;
+    const maxSteps = 500;
+
+    for (let i = 0; i < maxSteps; i++) {
+        x += vx;
+        y += vy;
+
+        // Duvar sekmesi
+        if (x < bubbleRadius)                  { x = bubbleRadius * 2 - x;                       vx *= -1; }
+        if (x > canvas.width - bubbleRadius)   { x = 2 * (canvas.width - bubbleRadius) - x;     vx *= -1; }
+
+        // Tavana çarptı
+        if (y <= bubbleRadius) break;
+
+        // Balona çarptı
+        let hit = false;
+        for (let r = 0; r < ROWS && !hit; r++) {
+            for (let c = 0; c < COLS && !hit; c++) {
+                if (grid[r][c].active && !grid[r][c].isPopping) {
+                    const { x: bx, y: by } = getBubbleCoords(r, c);
+                    if (Math.hypot(x - bx, y - by) < bubbleRadius * 1.6) hit = true;
+                }
+            }
+        }
+        if (hit) break;
+
+        // Her N adımda bir nokta çiz
+        if (i % 5 === 0) {
+            const alpha = 0.72 - (i / maxSteps) * 0.45;
+            ctx.beginPath();
+            ctx.arc(x, y, dotR, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+            ctx.fill();
+        }
+    }
+}
+
 function drawAimingArrow(startX, startY, angle) {
     ctx.save();
     ctx.translate(startX, startY);
@@ -471,7 +514,10 @@ function render() {
 
         const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(mouse.y - startY, mouse.x - startX);
-        if (angle < 0 && !projectile.moving && !projectile.isSettling) drawAimingArrow(startX, startY, angle);
+        if (angle < 0 && !projectile.moving && !projectile.isSettling) {
+            drawTrajectory(startX, startY, angle);
+            drawAimingArrow(startX, startY, angle);
+        }
 
         if (projectile) {
             if (projectile.moving) {
