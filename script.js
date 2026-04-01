@@ -577,15 +577,20 @@ function checkCollision() {
         }
     }
     if (hit) {
-        // Çarpılan balonun bağlı grubuna itme animasyonu uygula
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
-        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
-        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
-        if (grid[r][c] && grid[r][c].active) {
-            // Önce komşulara bak
-            const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+
+        let targetR = -1, targetC = -1;
+
+        if (hitR < 0) {
+            // Tavana çarptı — pixel pozisyondan hesapla
+            let r = 0;
+            let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+            let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+            targetR = r; targetC = c;
+        } else {
+            // Bir balona çarptı — çarpılan balonun boş komşularından en yakınını seç
+            const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
@@ -593,13 +598,13 @@ function checkCollision() {
                     const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
                     if (d < minDist) { minDist = d; best = n; }
                 });
-                r = best.r; c = best.c;
+                targetR = best.r; targetC = best.c;
             } else {
-                // Komşu bulunamazsa daha geniş alanda en yakın boş hücreyi bul
+                // Komşu yoksa genişlet: 2 sıra uzaktaki boş hücreler
                 let best = null, minDist = Infinity;
-                for (let dr = -2; dr <= 1; dr++) {
+                for (let dr = -2; dr <= 2; dr++) {
                     for (let dc = -2; dc <= 2; dc++) {
-                        const nr = r + dr, nc = c + dc;
+                        const nr = hitR + dr, nc = hitC + dc;
                         if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
                         if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
                         const coords = getBubbleCoords(nr, nc);
@@ -607,12 +612,15 @@ function checkCollision() {
                         if (d < minDist) { minDist = d; best = grid[nr][nc]; }
                     }
                 }
-                if (best) { r = best.r; c = best.c; }
+                if (best) { targetR = best.r; targetC = best.c; }
             }
         }
-        const target = getBubbleCoords(r, c);
+
+        if (targetR < 0 || targetC < 0) { createProjectile(); return; }
+
+        const target = getBubbleCoords(targetR, targetC);
         projectile.targetX = target.x; projectile.targetY = target.y;
-        projectile.targetR = r; projectile.targetC = c;
+        projectile.targetR = targetR; projectile.targetC = targetC;
         projectile.isSettling = true;
     }
 }
