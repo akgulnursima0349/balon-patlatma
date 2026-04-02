@@ -589,18 +589,25 @@ function checkCollision() {
             let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
             targetR = r; targetC = c;
         } else {
-            // Bir balona çarptı — çarpılan balonun boş komşularından en yakınını seç
+            // Bir balona çarptı — geliş yönünün tersini kullanarak doğru boş komşuyu bul
+            // (projectile pozisyonu bazen balonun öte tarafına geçmiş olabilir)
+            const hitCoords = getBubbleCoords(hitR, hitC);
+            // Topun çarpılan balona göre geldiği yön (velocity'nin tersi)
+            const fromX = hitCoords.x - projectile.vx * bubbleRadius * 2;
+            const fromY = hitCoords.y - projectile.vy * bubbleRadius * 2;
+
             const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
                     const coords = getBubbleCoords(n.r, n.c);
-                    const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                    // Geliş noktasına en yakın boş komşuyu seç
+                    const d = Math.hypot(fromX - coords.x, fromY - coords.y);
                     if (d < minDist) { minDist = d; best = n; }
                 });
                 targetR = best.r; targetC = best.c;
             } else {
-                // Komşu yoksa genişlet: 2 sıra uzaktaki boş hücreler
+                // Komşu yoksa genişlet: geliş yönü referanslı
                 let best = null, minDist = Infinity;
                 for (let dr = -2; dr <= 2; dr++) {
                     for (let dc = -2; dc <= 2; dc++) {
@@ -608,7 +615,7 @@ function checkCollision() {
                         if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
                         if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
                         const coords = getBubbleCoords(nr, nc);
-                        const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                        const d = Math.hypot(fromX - coords.x, fromY - coords.y);
                         if (d < minDist) { minDist = d; best = grid[nr][nc]; }
                     }
                 }
