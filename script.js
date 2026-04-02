@@ -596,9 +596,11 @@ function checkCollision() {
         let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
         let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
-        // Hesaplanan hücre doluysa boş yer bul
+        // Hesaplanan hücre doluysa: çarpılan balonun (hitR,hitC) komşularından en yakın boşu seç
         if (grid[r][c] && grid[r][c].active) {
-            const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+            const searchR = hitR >= 0 ? hitR : r;
+            const searchC = hitR >= 0 ? hitC : c;
+            const neighbors = getNeighbors(searchR, searchC).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
@@ -608,8 +610,20 @@ function checkCollision() {
                 });
                 r = best.r; c = best.c;
             } else {
-                const cell = findEmptyCell(projectile.x, projectile.y);
-                if (cell) { r = cell.r; c = cell.c; }
+                // Komşu da yoksa pixel hesabındaki hücrenin de komşularına bak
+                const nb2 = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+                if (nb2.length > 0) {
+                    let best = nb2[0], minDist = Infinity;
+                    nb2.forEach(n => {
+                        const coords = getBubbleCoords(n.r, n.c);
+                        const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                        if (d < minDist) { minDist = d; best = n; }
+                    });
+                    r = best.r; c = best.c;
+                } else {
+                    const cell = findEmptyCell(projectile.x, projectile.y);
+                    if (cell) { r = cell.r; c = cell.c; }
+                }
             }
         }
         const target = getBubbleCoords(r, c);
