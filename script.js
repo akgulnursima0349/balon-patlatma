@@ -580,30 +580,59 @@ function checkCollision() {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
 
-        // Pixel pozisyondan hedef hücreyi hesapla (orijinal güvenilir yaklaşım, gridRowOffset ile düzeltildi)
-        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
-        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+        let targetR = -1, targetC = -1;
 
-        // Hesaplanan hücre doluysa çarpılan balonun boş komşularından en yakınını seç
-        if (grid[r] && grid[r][c] && grid[r][c].active) {
-            const searchR = hitR >= 0 ? hitR : r;
-            const searchC = hitR >= 0 ? hitC : c;
-            const neighbors = getNeighbors(searchR, searchC).filter(n => !n.active && !n.isPopping);
-            if (neighbors.length > 0) {
-                let best = neighbors[0], minDist = Infinity;
-                neighbors.forEach(n => {
-                    const coords = getBubbleCoords(n.r, n.c);
-                    const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
-                    if (d < minDist) { minDist = d; best = n; }
-                });
-                r = best.r; c = best.c;
-            }
+        if (hitR < 0) {
+            // Tavana çarptı — pixel hesabıyla 0. satıra yerleştir
+            let r = 0;
+            let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+            let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+            if (!grid[r][c].active) { targetR = r; targetC = c; }
         }
 
-        const target = getBubbleCoords(r, c);
+        if (targetR < 0 && hitR >= 0) {
+            // Balona çarptı — dot product ile geliş yönüne en uygun boş komşuyu bul
+            const vmag = Math.hypot(projectile.vx, projectile.vy) || 1;
+            const invDirX = -projectile.vx / vmag;
+            const invDirY = -projectile.vy / vmag;
+            const hitCoords = getBubbleCoords(hitR, hitC);
+
+            const pickBest = (cells) => {
+                let best = null, bestScore = -Infinity;
+                cells.forEach(n => {
+                    const coords = getBubbleCoords(n.r, n.c);
+                    const dx = coords.x - hitCoords.x;
+                    const dy = coords.y - hitCoords.y;
+                    const mag = Math.hypot(dx, dy) || 1;
+                    const score = (dx / mag) * invDirX + (dy / mag) * invDirY;
+                    if (score > bestScore) { bestScore = score; best = n; }
+                });
+                return best;
+            };
+
+            const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
+            let best = neighbors.length > 0 ? pickBest(neighbors) : null;
+
+            if (!best) {
+                // Genişletilmiş arama
+                const expanded = [];
+                for (let dr = -2; dr <= 2; dr++)
+                    for (let dc = -2; dc <= 2; dc++) {
+                        const nr = hitR + dr, nc = hitC + dc;
+                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+                        if (!grid[nr][nc].active && !grid[nr][nc].isPopping) expanded.push(grid[nr][nc]);
+                    }
+                best = expanded.length > 0 ? pickBest(expanded) : null;
+            }
+
+            if (best) { targetR = best.r; targetC = best.c; }
+        }
+
+        if (targetR < 0) { createProjectile(); return; }
+
+        const target = getBubbleCoords(targetR, targetC);
         projectile.targetX = target.x; projectile.targetY = target.y;
-        projectile.targetR = r; projectile.targetC = c;
+        projectile.targetR = targetR; projectile.targetC = targetC;
         projectile.isSettling = true;
     }
 }
