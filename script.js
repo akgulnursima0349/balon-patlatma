@@ -560,6 +560,20 @@ function render() {
     requestAnimationFrame(render);
 }
 
+function findEmptyCell(nearX, nearY) {
+    // Tüm grid'de nearX,nearY'ye en yakın boş hücreyi bulur
+    let best = null, minDist = Infinity;
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (grid[r][c].active || grid[r][c].isPopping) continue;
+            const coords = getBubbleCoords(r, c);
+            const d = Math.hypot(nearX - coords.x, nearY - coords.y);
+            if (d < minDist) { minDist = d; best = grid[r][c]; }
+        }
+    }
+    return best;
+}
+
 function checkCollision() {
     let hit = projectile.y <= bubbleRadius;
     let hitR = -1, hitC = -1;
@@ -579,10 +593,10 @@ function checkCollision() {
     if (hit) {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
-        let r = Math.round((projectile.y - bubbleRadius) / rowHeight);
-        r = Math.max(0, Math.min(ROWS - 1, r));
+        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
         let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+        // Hesaplanan hücre doluysa boş yer bul
         if (grid[r][c] && grid[r][c].active) {
             const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
@@ -593,18 +607,9 @@ function checkCollision() {
                     if (d < minDist) { minDist = d; best = n; }
                 });
                 r = best.r; c = best.c;
-            } else if (hitR >= 0) {
-                // Pixel hesabı boş komşu bulamadıysa çarpılan balonun komşularına bak
-                const nbFromHit = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
-                if (nbFromHit.length > 0) {
-                    let best = nbFromHit[0], minDist = Infinity;
-                    nbFromHit.forEach(n => {
-                        const coords = getBubbleCoords(n.r, n.c);
-                        const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
-                        if (d < minDist) { minDist = d; best = n; }
-                    });
-                    r = best.r; c = best.c;
-                }
+            } else {
+                const cell = findEmptyCell(projectile.x, projectile.y);
+                if (cell) { r = cell.r; c = cell.c; }
             }
         }
         const target = getBubbleCoords(r, c);
@@ -616,19 +621,11 @@ function checkCollision() {
 
 function finalizeSettling() {
     let r = projectile.targetR; let c = projectile.targetC;
-    // Hedef hücre dolu ise tüm grid'de en yakın boş hücreyi bul — top asla kaybolmaz
+    // Son güvence: hedef hâlâ doluysa tüm grid'de en yakın boş hücreye yerleştir
     if (grid[r][c] && grid[r][c].active) {
-        let best = null, minDist = Infinity;
-        for (let dr = -3; dr <= 3; dr++) for (let dc = -3; dc <= 3; dc++) {
-            const nr = r + dr, nc = c + dc;
-            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-            if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
-            const coords = getBubbleCoords(nr, nc);
-            const d = Math.hypot(projectile.targetX - coords.x, projectile.targetY - coords.y);
-            if (d < minDist) { minDist = d; best = grid[nr][nc]; }
-        }
-        if (!best) return; // grid tamamen dolu, bu noktada oyun zaten bitmiş olmalı
-        r = best.r; c = best.c;
+        const cell = findEmptyCell(projectile.targetX, projectile.targetY);
+        if (!cell) { endGame(); return; } // grid tamamen dolu
+        r = cell.r; c = cell.c;
     }
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
