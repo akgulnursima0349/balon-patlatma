@@ -580,54 +580,30 @@ function checkCollision() {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
 
-        let targetR = -1, targetC = -1;
+        // Pixel pozisyondan hedef hücreyi hesapla (orijinal güvenilir yaklaşım, gridRowOffset ile düzeltildi)
+        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
+        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
 
-        if (hitR < 0) {
-            // Tavana çarptı — pixel pozisyondan hesapla
-            let r = 0;
-            let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-            let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
-            targetR = r; targetC = c;
-        } else {
-            // Bir balona çarptı — geliş yönünün tersini kullanarak doğru boş komşuyu bul
-            // (projectile pozisyonu bazen balonun öte tarafına geçmiş olabilir)
-            const hitCoords = getBubbleCoords(hitR, hitC);
-            // Topun çarpılan balona göre geldiği yön (velocity'nin tersi)
-            const fromX = hitCoords.x - projectile.vx * bubbleRadius * 2;
-            const fromY = hitCoords.y - projectile.vy * bubbleRadius * 2;
-
-            const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
+        // Hesaplanan hücre doluysa çarpılan balonun boş komşularından en yakınını seç
+        if (grid[r] && grid[r][c] && grid[r][c].active) {
+            const searchR = hitR >= 0 ? hitR : r;
+            const searchC = hitR >= 0 ? hitC : c;
+            const neighbors = getNeighbors(searchR, searchC).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
                     const coords = getBubbleCoords(n.r, n.c);
-                    // Geliş noktasına en yakın boş komşuyu seç
-                    const d = Math.hypot(fromX - coords.x, fromY - coords.y);
+                    const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
                     if (d < minDist) { minDist = d; best = n; }
                 });
-                targetR = best.r; targetC = best.c;
-            } else {
-                // Komşu yoksa genişlet: geliş yönü referanslı
-                let best = null, minDist = Infinity;
-                for (let dr = -2; dr <= 2; dr++) {
-                    for (let dc = -2; dc <= 2; dc++) {
-                        const nr = hitR + dr, nc = hitC + dc;
-                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-                        if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
-                        const coords = getBubbleCoords(nr, nc);
-                        const d = Math.hypot(fromX - coords.x, fromY - coords.y);
-                        if (d < minDist) { minDist = d; best = grid[nr][nc]; }
-                    }
-                }
-                if (best) { targetR = best.r; targetC = best.c; }
+                r = best.r; c = best.c;
             }
         }
 
-        if (targetR < 0 || targetC < 0) { createProjectile(); return; }
-
-        const target = getBubbleCoords(targetR, targetC);
+        const target = getBubbleCoords(r, c);
         projectile.targetX = target.x; projectile.targetY = target.y;
-        projectile.targetR = targetR; projectile.targetC = targetC;
+        projectile.targetR = r; projectile.targetC = c;
         projectile.isSettling = true;
     }
 }
@@ -709,15 +685,15 @@ function pushGridDown() {
     // Eğer tüm satırları 1 satır aşağı kaydırırsak, hepsinin fiziksel pozisyonu (x eksenindeki yeri) kayar.
     // Bunu engellemek için r-1'den kopya alırken sütun hizalamasına dikkat etmemiz gerekir.
 
-    // Satırları kaydır
+    // Aktif patlama/sallanma animasyonlarını temizle — kaymadan sonra konumlar bozulur
+    bubbleOffsets = {};
+
+    // Satırları kaydır (isPopping dahil tüm durumu kopyala)
     for (let r = ROWS - 1; r > 0; r--) {
         for (let c = 0; c < COLS; c++) {
-            // Sağ boşluk(kayma) sorununu çözmek için offset farkını yok ediyoruz:
-            // Sütun indeksini olduğu gibi kopyala, ancak altıgen dizilimi korumak için 
-            // sadece renk ve aktiflik durumunu dikey olarak kopyala.
-            // Bu sayede hiçbir sütun sağa sola kaymaz, sadece renkler aşağı iner.
             grid[r][c].active = grid[r - 1][c].active;
             grid[r][c].colorIndex = grid[r - 1][c].colorIndex;
+            grid[r][c].isPopping = grid[r - 1][c].isPopping;
         }
     }
 
