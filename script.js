@@ -615,9 +615,21 @@ function checkCollision() {
 }
 
 function finalizeSettling() {
-    const r = projectile.targetR; const c = projectile.targetC;
-    // Hedef hücre hâlâ doluysa (race condition) topu sil, yenisini ver
-    if (grid[r][c] && grid[r][c].active) { createProjectile(); return; }
+    let r = projectile.targetR; let c = projectile.targetC;
+    // Hedef hücre dolu ise tüm grid'de en yakın boş hücreyi bul — top asla kaybolmaz
+    if (grid[r][c] && grid[r][c].active) {
+        let best = null, minDist = Infinity;
+        for (let dr = -3; dr <= 3; dr++) for (let dc = -3; dc <= 3; dc++) {
+            const nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+            if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
+            const coords = getBubbleCoords(nr, nc);
+            const d = Math.hypot(projectile.targetX - coords.x, projectile.targetY - coords.y);
+            if (d < minDist) { minDist = d; best = grid[nr][nc]; }
+        }
+        if (!best) return; // grid tamamen dolu, bu noktada oyun zaten bitmiş olmalı
+        r = best.r; c = best.c;
+    }
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
     grid[r][c].colorIndex = projectile.colorIndex;
