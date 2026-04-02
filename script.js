@@ -334,7 +334,7 @@ function resize() {
     rowHeight = bubbleRadius * 1.732;
 
     // Yükseklik değiştiği için atıcının pozisyonunu güncellememiz gerekebilir
-    if (projectile && !projectile.moving && !projectile.isSettling) {
+    if (projectile && !projectile.moving && !projectile.moving) {
         projectile.x = canvas.width / 2;
         projectile.y = canvas.height - bubbleRadius * 1.5;
     }
@@ -537,7 +537,7 @@ function render() {
 
         const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(mouse.y - startY, mouse.x - startX);
-        if (angle < 0 && !projectile.moving && !projectile.isSettling) {
+        if (angle < 0 && !projectile.moving && !projectile.moving) {
             drawTrajectory(startX, startY, angle);
             drawAimingArrow(startX, startY, angle);
         }
@@ -548,20 +548,8 @@ function render() {
                 projectile.y += projectile.vy;
                 if (projectile.x < bubbleRadius || projectile.x > canvas.width - bubbleRadius) projectile.vx *= -1;
                 checkCollision();
-            } else if (projectile.isSettling) {
-                const dx = projectile.targetX - projectile.x;
-                const dy = projectile.targetY - projectile.y;
-                projectile.settleFrames = (projectile.settleFrames || 0) + 1;
-                if (Math.hypot(dx, dy) < 1 || projectile.settleFrames > 15) {
-                    projectile.x = projectile.targetX;
-                    projectile.y = projectile.targetY;
-                    finalizeSettling();
-                } else {
-                    projectile.x += dx * 0.35;
-                    projectile.y += dy * 0.35;
-                }
             }
-            drawBubbleOnCtx(ctx, projectile.x, projectile.y, projectile.colorIndex, 0.88);
+            if (projectile) drawBubbleOnCtx(ctx, projectile.x, projectile.y, projectile.colorIndex, 0.88);
         }
     }
     requestAnimationFrame(render);
@@ -589,7 +577,7 @@ function checkCollision() {
             for (let c = 0; c < COLS; c++) {
                 if (grid[r][c].active && !grid[r][c].isPopping) {
                     const { x, y } = getBubbleCoords(r, c);
-                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.5) {
+                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.9) {
                         hit = true; hitR = r; hitC = c; break;
                     }
                 }
@@ -630,13 +618,13 @@ function checkCollision() {
             else { createProjectile(); return; } // grid tamamen dolu
         }
 
+        // Topu hedefe snap et, anında yerleştir
         const target = getBubbleCoords(targetR, targetC);
-        projectile.targetX = target.x;
-        projectile.targetY = target.y;
+        projectile.x = target.x;
+        projectile.y = target.y;
         projectile.targetR = targetR;
         projectile.targetC = targetC;
-        projectile.isSettling = true;
-        projectile.settleFrames = 0;
+        finalizeSettling();
     }
 }
 
@@ -757,13 +745,13 @@ function createProjectile() {
     projectile = {
         x: canvas.width / 2, y: canvas.height - bubbleRadius * 1.5,
         vx: 0, vy: 0, colorIndex: nextColorIndex,
-        moving: false, isSettling: false, settleFrames: 0
+        moving: false
     };
     nextColorIndex = Math.floor(Math.random() * THEMES[currentTheme].colors.length);
 }
 
 function handleInput(e) {
-    if (gameState !== STATES.PLAYING || (projectile && (projectile.moving || projectile.isSettling))) return;
+    if (gameState !== STATES.PLAYING || (projectile && projectile.moving)) return;
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX || (e.touches && e.touches[0].clientX)) - rect.left) * (canvas.width / rect.width);
     const y = ((e.clientY || (e.touches && e.touches[0].clientY)) - rect.top) * (canvas.height / rect.height);
