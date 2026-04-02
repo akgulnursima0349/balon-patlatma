@@ -593,22 +593,29 @@ function checkCollision() {
         let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
         let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
 
-        // Hesaplanan hücre doluysa boş komşu ara
+        // Hedef dolu ise: merkezden dışa genişleyen arama (asla başarısız olmaz)
         if (grid[r][c] && grid[r][c].active) {
-            // Önce pixel hücresinin komşuları, sonra hitR,hitC komşuları
-            let neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
-            if (neighbors.length === 0 && hitR >= 0)
-                neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
-            if (neighbors.length > 0) {
-                let best = neighbors[0], minDist = Infinity;
-                neighbors.forEach(n => {
-                    const coords = getBubbleCoords(n.r, n.c);
-                    const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
-                    if (d < minDist) { minDist = d; best = n; }
-                });
-                r = best.r; c = best.c;
+            const cx = projectile.x, cy = projectile.y;
+            let found = false;
+            outer:
+            for (let radius = 1; radius <= COLS; radius++) {
+                for (let dr = -radius; dr <= radius; dr++) {
+                    for (let dc = -radius; dc <= radius; dc++) {
+                        if (Math.abs(dr) !== radius && Math.abs(dc) !== radius) continue;
+                        const nr = r + dr, nc = c + dc;
+                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+                        if (!grid[nr][nc].active && !grid[nr][nc].isPopping) {
+                            const coords = getBubbleCoords(nr, nc);
+                            // Sadece çarpılan balonun komşusu olan boş hücreleri kabul et
+                            if (hitR >= 0) {
+                                const isAdjacentToHit = getNeighbors(hitR, hitC).some(n => n.r === nr && n.c === nc);
+                                if (!isAdjacentToHit && radius <= 2) continue;
+                            }
+                            r = nr; c = nc; found = true; break outer;
+                        }
+                    }
+                }
             }
-            // Hâlâ dolu: kalmaya devam et (finalizeSettling kurtarır)
         }
 
         const target = getBubbleCoords(r, c);
@@ -623,22 +630,23 @@ function checkCollision() {
 
 function finalizeSettling() {
     let r = projectile.targetR; let c = projectile.targetC;
-    // Son güvence: hedef hâlâ doluysa komşularda boş yer ara
+    // Son güvence: hedef dolu ise genişleyen arama ile boş hücre bul
     if (grid[r][c] && grid[r][c].active) {
-        const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
-        if (neighbors.length > 0) {
-            let best = neighbors[0], minDist = Infinity;
-            neighbors.forEach(n => {
-                const coords = getBubbleCoords(n.r, n.c);
-                const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
-                if (d < minDist) { minDist = d; best = n; }
-            });
-            r = best.r; c = best.c;
-        } else {
-            // Gerçekten yer yok — bu topu say, yenisini getir
-            createProjectile();
-            return;
+        let found = false;
+        outer:
+        for (let radius = 1; radius <= COLS; radius++) {
+            for (let dr = -radius; dr <= radius; dr++) {
+                for (let dc = -radius; dc <= radius; dc++) {
+                    if (Math.abs(dr) !== radius && Math.abs(dc) !== radius) continue;
+                    const nr = r + dr, nc = c + dc;
+                    if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+                    if (!grid[nr][nc].active && !grid[nr][nc].isPopping) {
+                        r = nr; c = nc; found = true; break outer;
+                    }
+                }
+            }
         }
+        if (!found) { endGame(); return; } // grid tamamen dolu
     }
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
