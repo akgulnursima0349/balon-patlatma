@@ -579,84 +579,45 @@ function checkCollision() {
     if (hit) {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
-
-        let targetR = -1, targetC = -1;
-
-        if (hitR < 0) {
-            // Tavana çarptı — pixel hesabıyla 0. satıra yerleştir
-            let r = 0;
-            let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-            let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
-            if (!grid[r][c].active) { targetR = r; targetC = c; }
-        }
-
-        if (targetR < 0 && hitR >= 0) {
-            // Balona çarptı — dot product ile geliş yönüne en uygun boş komşuyu bul
-            const vmag = Math.hypot(projectile.vx, projectile.vy) || 1;
-            const invDirX = -projectile.vx / vmag;
-            const invDirY = -projectile.vy / vmag;
-            const hitCoords = getBubbleCoords(hitR, hitC);
-
-            const pickBest = (cells) => {
-                let best = null, bestScore = -Infinity;
-                cells.forEach(n => {
+        let r = Math.round((projectile.y - bubbleRadius) / rowHeight);
+        r = Math.max(0, Math.min(ROWS - 1, r));
+        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+        if (grid[r][c] && grid[r][c].active) {
+            const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+            if (neighbors.length > 0) {
+                let best = neighbors[0], minDist = Infinity;
+                neighbors.forEach(n => {
                     const coords = getBubbleCoords(n.r, n.c);
-                    const dx = coords.x - hitCoords.x;
-                    const dy = coords.y - hitCoords.y;
-                    const mag = Math.hypot(dx, dy) || 1;
-                    const score = (dx / mag) * invDirX + (dy / mag) * invDirY;
-                    if (score > bestScore) { bestScore = score; best = n; }
+                    const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                    if (d < minDist) { minDist = d; best = n; }
                 });
-                return best;
-            };
-
-            const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
-            let best = neighbors.length > 0 ? pickBest(neighbors) : null;
-
-            if (!best) {
-                // Genişletilmiş arama
-                const expanded = [];
-                for (let dr = -2; dr <= 2; dr++)
-                    for (let dc = -2; dc <= 2; dc++) {
-                        const nr = hitR + dr, nc = hitC + dc;
-                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-                        if (!grid[nr][nc].active && !grid[nr][nc].isPopping) expanded.push(grid[nr][nc]);
-                    }
-                best = expanded.length > 0 ? pickBest(expanded) : null;
+                r = best.r; c = best.c;
+            } else if (hitR >= 0) {
+                // Pixel hesabı boş komşu bulamadıysa çarpılan balonun komşularına bak
+                const nbFromHit = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
+                if (nbFromHit.length > 0) {
+                    let best = nbFromHit[0], minDist = Infinity;
+                    nbFromHit.forEach(n => {
+                        const coords = getBubbleCoords(n.r, n.c);
+                        const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                        if (d < minDist) { minDist = d; best = n; }
+                    });
+                    r = best.r; c = best.c;
+                }
             }
-
-            if (best) { targetR = best.r; targetC = best.c; }
         }
-
-        if (targetR < 0) { createProjectile(); return; }
-
-        const target = getBubbleCoords(targetR, targetC);
+        const target = getBubbleCoords(r, c);
         projectile.targetX = target.x; projectile.targetY = target.y;
-        projectile.targetR = targetR; projectile.targetC = targetC;
+        projectile.targetR = r; projectile.targetC = c;
         projectile.isSettling = true;
     }
 }
 
 function finalizeSettling() {
-    let r = projectile.targetR; let c = projectile.targetC;
-
-    // Hedef hücre dolu ise (hesaplama hatası) — en yakın boş hücreyi bul
-    if (grid[r][c] && grid[r][c].active) {
-        let best = null, minDist = Infinity;
-        for (let dr = -3; dr <= 3; dr++) {
-            for (let dc = -3; dc <= 3; dc++) {
-                const nr = r + dr, nc = c + dc;
-                if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-                if (grid[nr][nc].active || grid[nr][nc].isPopping) continue;
-                const coords = getBubbleCoords(nr, nc);
-                const d = Math.hypot(projectile.targetX - coords.x, projectile.targetY - coords.y);
-                if (d < minDist) { minDist = d; best = grid[nr][nc]; }
-            }
-        }
-        if (!best) { createProjectile(); return; } // hiç yer yoksa topu sil, yenisini ver
-        r = best.r; c = best.c;
-    }
-
+    const r = projectile.targetR; const c = projectile.targetC;
+    // Hedef hücre hâlâ doluysa (race condition) topu sil, yenisini ver
+    if (grid[r][c] && grid[r][c].active) { createProjectile(); return; }
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
     grid[r][c].colorIndex = projectile.colorIndex;
@@ -664,7 +625,6 @@ function finalizeSettling() {
     const matches = findMatches(r, c, grid[r][c].colorIndex);
 
     if (matches.size >= 3) {
-        // Grid'den anında kaldır, koordinatları şimdi kaydet (gridRowOffset değişse etkilenmez)
         const matchData = [];
         matches.forEach(k => {
             const [rr, cc] = k.split(',').map(Number);
@@ -675,7 +635,6 @@ function finalizeSettling() {
             matchData.push({ x, y, colorIndex: b.colorIndex });
         });
 
-        // Patlama animasyonlarını sırayla başlat (görsel efekt, grid zaten güncellendi)
         let delay = 0;
         matchData.forEach(({ x, y, colorIndex }) => {
             setTimeout(() => {
@@ -689,9 +648,7 @@ function finalizeSettling() {
         const dropped = dropDisconnected();
         if (dropped > 0) score += dropped * 20;
         updateUI();
-        // Başarılı patlatmada ceza sayacı dolmaz (veya klasik modda azalmaz)
     } else {
-        // Hatalı atışta ceza sayacını azalt
         shotCounter--;
         if (shotCounter <= 0) {
             pushGridDown();
