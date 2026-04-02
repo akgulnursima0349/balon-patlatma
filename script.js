@@ -584,69 +584,66 @@ function checkCollision() {
             if (hit) break;
         }
     }
-    if (hit) {
-        if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
-        projectile.moving = false;
+    if (!hit) return;
 
-        // Pixel pozisyondan hedef hücreyi hesapla (gridRowOffset ile)
-        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
-        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+    if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
+    projectile.moving = false;
 
-        // Hedef dolu ise: merkezden dışa genişleyen arama (asla başarısız olmaz)
-        if (grid[r][c] && grid[r][c].active) {
-            const cx = projectile.x, cy = projectile.y;
-            let found = false;
-            outer:
-            for (let radius = 1; radius <= COLS; radius++) {
-                for (let dr = -radius; dr <= radius; dr++) {
-                    for (let dc = -radius; dc <= radius; dc++) {
-                        if (Math.abs(dr) !== radius && Math.abs(dc) !== radius) continue;
-                        const nr = r + dr, nc = c + dc;
-                        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-                        if (!grid[nr][nc].active && !grid[nr][nc].isPopping) {
-                            const coords = getBubbleCoords(nr, nc);
-                            // Sadece çarpılan balonun komşusu olan boş hücreleri kabul et
-                            if (hitR >= 0) {
-                                const isAdjacentToHit = getNeighbors(hitR, hitC).some(n => n.r === nr && n.c === nc);
-                                if (!isAdjacentToHit && radius <= 2) continue;
-                            }
-                            r = nr; c = nc; found = true; break outer;
-                        }
-                    }
+    let targetR = -1, targetC = -1;
+
+    if (hitR < 0) {
+        // Tavana çarptı: pixel hesabıyla 0. satıra yerleştir
+        targetR = 0;
+        const offsetX = ((targetR + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+        targetC = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
+    } else {
+        // Balona çarptı: SADECE hitR,hitC'nin boş komşularına bak
+        const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
+        if (neighbors.length > 0) {
+            let best = neighbors[0], minDist = Infinity;
+            neighbors.forEach(n => {
+                const coords = getBubbleCoords(n.r, n.c);
+                const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                if (d < minDist) { minDist = d; best = n; }
+            });
+            targetR = best.r; targetC = best.c;
+        } else {
+            // Tüm komşular dolu: BFS ile hitR,hitC'den en yakın boş hücreye ulaş
+            const visited = new Set([`${hitR},${hitC}`]);
+            const queue = [{ r: hitR, c: hitC }];
+            let found = null;
+            while (queue.length > 0 && !found) {
+                const curr = queue.shift();
+                for (const nb of getNeighbors(curr.r, curr.c)) {
+                    const key = `${nb.r},${nb.c}`;
+                    if (visited.has(key)) continue;
+                    visited.add(key);
+                    if (!nb.active && !nb.isPopping) { found = nb; break; }
+                    if (nb.active) queue.push({ r: nb.r, c: nb.c });
                 }
             }
+            if (found) { targetR = found.r; targetC = found.c; }
         }
-
-        const target = getBubbleCoords(r, c);
-        projectile.targetX = target.x;
-        projectile.targetY = target.y;
-        projectile.targetR = r;
-        projectile.targetC = c;
-        projectile.isSettling = true;
-        projectile.settleFrames = 0;
     }
+
+    if (targetR < 0) return; // hiç boş hücre yok
+
+    const target = getBubbleCoords(targetR, targetC);
+    projectile.targetX = target.x;
+    projectile.targetY = target.y;
+    projectile.targetR = targetR;
+    projectile.targetC = targetC;
+    projectile.isSettling = true;
+    projectile.settleFrames = 0;
 }
 
 function finalizeSettling() {
     let r = projectile.targetR; let c = projectile.targetC;
-    // Son güvence: hedef dolu ise genişleyen arama ile boş hücre bul
     if (grid[r][c] && grid[r][c].active) {
-        let found = false;
-        outer:
-        for (let radius = 1; radius <= COLS; radius++) {
-            for (let dr = -radius; dr <= radius; dr++) {
-                for (let dc = -radius; dc <= radius; dc++) {
-                    if (Math.abs(dr) !== radius && Math.abs(dc) !== radius) continue;
-                    const nr = r + dr, nc = c + dc;
-                    if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-                    if (!grid[nr][nc].active && !grid[nr][nc].isPopping) {
-                        r = nr; c = nc; found = true; break outer;
-                    }
-                }
-            }
-        }
-        if (!found) { endGame(); return; } // grid tamamen dolu
+        // Hedef doluysa komşularda boş yer bul
+        const nb = getNeighbors(r, c).find(n => !n.active && !n.isPopping);
+        if (nb) { r = nb.r; c = nb.c; }
+        else { endGame(); return; }
     }
     if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
