@@ -334,7 +334,7 @@ function resize() {
     rowHeight = bubbleRadius * 1.732;
 
     // Yükseklik değiştiği için atıcının pozisyonunu güncellememiz gerekebilir
-    if (projectile && !projectile.moving && !projectile.moving) {
+    if (projectile && !projectile.isSettling && !projectile.moving && !projectile.isSettling && !projectile.moving) {
         projectile.x = canvas.width / 2;
         projectile.y = canvas.height - bubbleRadius * 1.5;
     }
@@ -537,7 +537,7 @@ function render() {
 
         const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(mouse.y - startY, mouse.x - startX);
-        if (angle < 0 && !projectile.moving && !projectile.moving) {
+        if (angle < 0 && !projectile.isSettling && !projectile.moving && !projectile.isSettling && !projectile.moving) {
             drawTrajectory(startX, startY, angle);
             drawAimingArrow(startX, startY, angle);
         }
@@ -548,25 +548,24 @@ function render() {
                 projectile.y += projectile.vy;
                 if (projectile.x < bubbleRadius || projectile.x > canvas.width - bubbleRadius) projectile.vx *= -1;
                 checkCollision();
+            } else if (projectile.isSettling) {
+                const dx = projectile.targetX - projectile.x;
+                const dy = projectile.targetY - projectile.y;
+                projectile.settleFrames++;
+                if (Math.hypot(dx, dy) < 0.5 || projectile.settleFrames >= 10) {
+                    projectile.x = projectile.targetX;
+                    projectile.y = projectile.targetY;
+                    projectile.isSettling = false;
+                    finalizeSettling();
+                } else {
+                    projectile.x += dx * 0.5;
+                    projectile.y += dy * 0.5;
+                }
             }
             if (projectile) drawBubbleOnCtx(ctx, projectile.x, projectile.y, projectile.colorIndex, 0.88);
         }
     }
     requestAnimationFrame(render);
-}
-
-function findEmptyCell(nearX, nearY) {
-    // Tüm grid'de nearX,nearY'ye en yakın boş hücreyi bulur
-    let best = null, minDist = Infinity;
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            if (grid[r][c].active || grid[r][c].isPopping) continue;
-            const coords = getBubbleCoords(r, c);
-            const d = Math.hypot(nearX - coords.x, nearY - coords.y);
-            if (d < minDist) { minDist = d; best = grid[r][c]; }
-        }
-    }
-    return best;
 }
 
 function checkCollision() {
@@ -577,7 +576,7 @@ function checkCollision() {
             for (let c = 0; c < COLS; c++) {
                 if (grid[r][c].active && !grid[r][c].isPopping) {
                     const { x, y } = getBubbleCoords(r, c);
-                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.9) {
+                    if (Math.hypot(projectile.x - x, projectile.y - y) < bubbleRadius * 1.8) {
                         hit = true; hitR = r; hitC = c; break;
                     }
                 }
@@ -589,17 +588,17 @@ function checkCollision() {
         if (hitR >= 0) applyImpact(hitR, hitC, projectile.vx, projectile.vy);
         projectile.moving = false;
 
-        let targetR = -1, targetC = -1;
+        // Pixel pozisyondan hedef hücreyi hesapla (gridRowOffset ile)
+        let r = Math.max(0, Math.min(ROWS - 1, Math.round((projectile.y - bubbleRadius) / rowHeight)));
+        let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
+        let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
 
-        if (hitR < 0) {
-            // Tavana çarptı
-            let r = 0;
-            let offsetX = ((r + gridRowOffset) % 2 !== 0) ? bubbleRadius : 0;
-            let c = Math.max(0, Math.min(COLS - 1, Math.round((projectile.x - bubbleRadius - offsetX) / (bubbleRadius * 2))));
-            if (!grid[r][c].active && !grid[r][c].isPopping) { targetR = r; targetC = c; }
-        } else {
-            // Balona çarptı — HER ZAMAN hitR,hitC'nin boş komşularına bak
-            const neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
+        // Hesaplanan hücre doluysa boş komşu ara
+        if (grid[r][c] && grid[r][c].active) {
+            // Önce pixel hücresinin komşuları, sonra hitR,hitC komşuları
+            let neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+            if (neighbors.length === 0 && hitR >= 0)
+                neighbors = getNeighbors(hitR, hitC).filter(n => !n.active && !n.isPopping);
             if (neighbors.length > 0) {
                 let best = neighbors[0], minDist = Infinity;
                 neighbors.forEach(n => {
@@ -607,36 +606,41 @@ function checkCollision() {
                     const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
                     if (d < minDist) { minDist = d; best = n; }
                 });
-                targetR = best.r; targetC = best.c;
+                r = best.r; c = best.c;
             }
+            // Hâlâ dolu: kalmaya devam et (finalizeSettling kurtarır)
         }
 
-        // Fallback: tüm grid'de en yakın boş hücre
-        if (targetR < 0) {
-            const cell = findEmptyCell(projectile.x, projectile.y);
-            if (cell) { targetR = cell.r; targetC = cell.c; }
-            else { createProjectile(); return; } // grid tamamen dolu
-        }
-
-        // Topu hedefe snap et, anında yerleştir
-        const target = getBubbleCoords(targetR, targetC);
-        projectile.x = target.x;
-        projectile.y = target.y;
-        projectile.targetR = targetR;
-        projectile.targetC = targetC;
-        finalizeSettling();
+        const target = getBubbleCoords(r, c);
+        projectile.targetX = target.x;
+        projectile.targetY = target.y;
+        projectile.targetR = r;
+        projectile.targetC = c;
+        projectile.isSettling = true;
+        projectile.settleFrames = 0;
     }
 }
 
 function finalizeSettling() {
     let r = projectile.targetR; let c = projectile.targetC;
-    // Son güvence: hedef hâlâ doluysa tüm grid'de en yakın boş hücreye yerleştir
+    // Son güvence: hedef hâlâ doluysa komşularda boş yer ara
     if (grid[r][c] && grid[r][c].active) {
-        const cell = findEmptyCell(projectile.x, projectile.y);
-        if (!cell) { endGame(); return; }
-        r = cell.r; c = cell.c;
+        const neighbors = getNeighbors(r, c).filter(n => !n.active && !n.isPopping);
+        if (neighbors.length > 0) {
+            let best = neighbors[0], minDist = Infinity;
+            neighbors.forEach(n => {
+                const coords = getBubbleCoords(n.r, n.c);
+                const d = Math.hypot(projectile.x - coords.x, projectile.y - coords.y);
+                if (d < minDist) { minDist = d; best = n; }
+            });
+            r = best.r; c = best.c;
+        } else {
+            // Gerçekten yer yok — bu topu say, yenisini getir
+            createProjectile();
+            return;
+        }
     }
-    if (r >= ROWS - 8) { endGame(); createProjectile(); return; }
+    if (r >= ROWS - 8) { endGame(); return; }
     grid[r][c].active = true;
     grid[r][c].colorIndex = projectile.colorIndex;
     grid[r][c].isPopping = false;
@@ -745,19 +749,19 @@ function createProjectile() {
     projectile = {
         x: canvas.width / 2, y: canvas.height - bubbleRadius * 1.5,
         vx: 0, vy: 0, colorIndex: nextColorIndex,
-        moving: false
+        moving: false, isSettling: false, settleFrames: 0
     };
     nextColorIndex = Math.floor(Math.random() * THEMES[currentTheme].colors.length);
 }
 
 function handleInput(e) {
-    if (gameState !== STATES.PLAYING || (projectile && projectile.moving)) return;
+    if (gameState !== STATES.PLAYING || (projectile && (projectile.moving || projectile.isSettling))) return;
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX || (e.touches && e.touches[0].clientX)) - rect.left) * (canvas.width / rect.width);
     const y = ((e.clientY || (e.touches && e.touches[0].clientY)) - rect.top) * (canvas.height / rect.height);
     mouse.x = x; mouse.y = y;
 
-    if ((e.type === 'pointerup' || e.type === 'touchend') && projectile && !projectile.moving) {
+    if ((e.type === 'pointerup' || e.type === 'touchend') && projectile && !projectile.isSettling && !projectile.moving) {
         const startX = canvas.width / 2, startY = canvas.height - bubbleRadius * 1.5;
         const angle = Math.atan2(y - startY, x - startX);
         if (angle < -0.2 && angle > -Math.PI + 0.2) {
